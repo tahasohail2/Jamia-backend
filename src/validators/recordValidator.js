@@ -61,7 +61,7 @@ const validateRecord = (req, res, next) => {
       return res.status(400).json({
         status: 'error',
         message: 'Validation failed',
-        details: error.errors.map(err => ({
+        details: error?.errors?.map(err => ({
           field: err.path.join('.'),
           message: err.message
         }))
