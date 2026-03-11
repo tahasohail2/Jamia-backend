@@ -3,23 +3,21 @@ const cors = require('cors');
 // CORS configuration
 const corsOptions = {
   origin: (origin, callback) => {
-    // Allow requests with no origin (like mobile apps or curl requests)
+    // In development mode, allow all requests
+    if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === undefined) {
+      return callback(null, true);
+    }
+    
+    // Allow requests with no origin (like mobile apps, Postman, or curl)
     if (!origin) {
       return callback(null, true);
     }
     
-    // Allowed origins
+    // Allowed origins for production
     const allowedOrigins = [
       process.env.FRONTEND_URL || 'http://localhost:5173',
       'http://localhost:5174'
     ];
-    
-    // In development mode, allow all localhost origins
-    if (process.env.NODE_ENV === 'development') {
-      if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
-        return callback(null, true);
-      }
-    }
     
     // Check if origin is in allowed list
     if (allowedOrigins.includes(origin)) {
