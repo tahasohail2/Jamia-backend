@@ -202,7 +202,7 @@ const getRecordByCnic = async (req, res, next) => {
     const result = await pool.query(query, [cnic]);
 
     if (result.rows.length === 0) {
-      return res.status(404).json({
+      return res.status(200).json({
         status: 'not_found',
         message: 'No record found for this CNIC',
         exists: false
