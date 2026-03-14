@@ -1,4 +1,5 @@
 const { pool } = require('../config/database');
+const { uploadToCloudinary, deleteFromCloudinary } = require('../utils/cloudinaryUpload');
 
 // Helper function to convert camelCase to snake_case
 const toSnakeCase = (str) => {
@@ -28,13 +29,17 @@ const mapRowToRecord = (row) => {
     currentAddress: row.current_address,
     requiredGrade: row.required_grade,
     previousEducation: row.previous_education,
+    educationType: row.education_type,
     registrationNo: row.registration_no,
     lastYearGrade: row.last_year_grade,
     nextYearGrade: row.next_year_grade,
     examPart1Marks: row.exam_part1_marks,
     examPart2Marks: row.exam_part2_marks,
     totalMarks: row.total_marks,
-    remarks: row.remarks
+    remarks: row.remarks,
+    certificateUrls: row.certificate_urls || [],
+    cnicUrls: row.cnic_urls || [],
+    additionalUrls: row.additional_urls || []
   };
 };
 
@@ -55,6 +60,7 @@ const createRecord = async (req, res, next) => {
       currentAddress,
       requiredGrade,
       previousEducation,
+      educationType,
       registrationNo,
       lastYearGrade,
       nextYearGrade,
@@ -64,24 +70,93 @@ const createRecord = async (req, res, next) => {
       remarks
     } = req.body;
 
+    // Basic validation
+    if (!studentName || !dob || !cnic || !phone || !currentAddress) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Required fields missing',
+        details: 'studentName, dob, cnic, phone, and currentAddress are required'
+      });
+    }
+
+    let certificateUrls = [];
+    let cnicUrls = [];
+    let additionalUrls = [];
+
+    // Handle multiple file uploads
+    if (req.files) {
+      try {
+        // Upload certificates
+        if (req.files.certificates) {
+          for (const file of req.files.certificates) {
+            const result = await uploadToCloudinary(file.buffer, 'student-documents/certificates');
+            certificateUrls.push(result.secure_url);
+          }
+        }
+
+        // Upload CNIC documents
+        if (req.files.cnicDocuments) {
+          for (const file of req.files.cnicDocuments) {
+            const result = await uploadToCloudinary(file.buffer, 'student-documents/cnic');
+            cnicUrls.push(result.secure_url);
+          }
+        }
+
+        // Upload additional documents
+        if (req.files.additionalDocuments) {
+          for (const file of req.files.additionalDocuments) {
+            const result = await uploadToCloudinary(file.buffer, 'student-documents/additional');
+            additionalUrls.push(result.secure_url);
+          }
+        }
+      } catch (uploadError) {
+        console.error('Cloudinary upload error:', uploadError);
+        return res.status(500).json({
+          status: 'error',
+          message: 'Failed to upload documents',
+          details: uploadError.message
+        });
+      }
+    }
+
     const query = `
       INSERT INTO student_records (
         admission_type, gender, department, student_name, father_name,
         dob, cnic, phone, whatsapp, full_address, current_address,
-        required_grade, previous_education, registration_no,
+        required_grade, previous_education, education_type, registration_no,
         last_year_grade, next_year_grade, exam_part1_marks,
-        exam_part2_marks, total_marks, remarks
+        exam_part2_marks, total_marks, remarks,
+        certificate_urls, cnic_urls, additional_urls
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
       RETURNING *
     `;
 
     const values = [
-      admissionType, gender, department, studentName, fatherName,
-      dob, cnic, phone, whatsapp, fullAddress, currentAddress,
-      requiredGrade, previousEducation, registrationNo,
-      lastYearGrade, nextYearGrade, examPart1Marks,
-      examPart2Marks, totalMarks, remarks
+      admissionType || '',
+      gender || '',
+      department || '',
+      studentName,
+      fatherName || '',
+      dob,
+      cnic,
+      phone,
+      whatsapp || '',
+      fullAddress || '',
+      currentAddress,
+      requiredGrade || '',
+      previousEducation || '',
+      educationType || '',
+      registrationNo || '',
+      lastYearGrade || '',
+      nextYearGrade || '',
+      examPart1Marks || '',
+      examPart2Marks || '',
+      totalMarks || '',
+      remarks || '',
+      certificateUrls,
+      cnicUrls,
+      additionalUrls
     ];
 
     const result = await pool.query(query, values);
@@ -142,21 +217,47 @@ const deleteRecordById = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    const query = `
-      DELETE FROM student_records
+    // First, get the record to find document URLs
+    const selectQuery = `
+      SELECT certificate_urls, cnic_urls, additional_urls FROM student_records
       WHERE id = $1
-      RETURNING id
     `;
+    const selectResult = await pool.query(selectQuery, [id]);
 
-    const result = await pool.query(query, [id]);
-
-    if (result.rows.length === 0) {
+    if (selectResult.rows.length === 0) {
       return res.status(404).json({
         status: 'error',
         message: 'Record not found',
         details: { id }
       });
     }
+
+    // Delete all documents from Cloudinary
+    const row = selectResult.rows[0];
+    const allUrls = [
+      ...(row.certificate_urls || []),
+      ...(row.cnic_urls || []),
+      ...(row.additional_urls || [])
+    ];
+
+    for (const url of allUrls) {
+      try {
+        // Extract public_id from URL
+        const publicId = url.split('/').slice(-2).join('/').split('.')[0];
+        await deleteFromCloudinary(publicId);
+      } catch (cloudinaryError) {
+        console.error('Cloudinary deletion error:', cloudinaryError);
+        // Continue with database deletion even if Cloudinary fails
+      }
+    }
+
+    // Delete from database
+    const deleteQuery = `
+      DELETE FROM student_records
+      WHERE id = $1
+      RETURNING id
+    `;
+    await pool.query(deleteQuery, [id]);
 
     res.status(200).json({
       message: 'Record deleted successfully',

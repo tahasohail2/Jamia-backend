@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { validateRecord } = require('../validators/recordValidator');
+const upload = require('../middleware/upload');
 const { 
   createRecord, 
   getAllRecords, 
@@ -10,8 +10,17 @@ const {
   deleteAllRecords 
 } = require('../controllers/recordsController');
 
-// POST /api/records - Create a new student record
-router.post('/', validateRecord, createRecord);
+// POST /api/records - Create a new student record with optional file uploads
+// Accepts 3 file fields: certificates, cnicDocuments, additionalDocuments
+// Validation is handled in the controller
+router.post('/', 
+  upload.fields([
+    { name: 'certificates', maxCount: 10 },
+    { name: 'cnicDocuments', maxCount: 10 },
+    { name: 'additionalDocuments', maxCount: 10 }
+  ]), 
+  createRecord
+);
 
 // GET /api/records - Retrieve all student records
 router.get('/', getAllRecords);

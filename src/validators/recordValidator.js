@@ -36,6 +36,7 @@ const studentRecordSchema = z.object({
   // Conditional fields - allow empty strings
   requiredGrade: z.string(),
   previousEducation: z.string(),
+  educationType: z.string().optional().or(z.literal('')), // Optional field for new admissions
   registrationNo: z.string(),
   lastYearGrade: z.string(),
   nextYearGrade: z.string(),
