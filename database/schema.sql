@@ -31,9 +31,15 @@ CREATE TABLE IF NOT EXISTS student_records (
     -- Academic Information
     required_grade VARCHAR(50) NOT NULL,
     previous_education VARCHAR(200) NOT NULL,
+    education_type VARCHAR(100),
     registration_no VARCHAR(100) NOT NULL,
     last_year_grade VARCHAR(50) NOT NULL,
     next_year_grade VARCHAR(50) NOT NULL,
+    
+    -- Document Upload
+    certificate_urls TEXT[], -- Array of certificate URLs
+    cnic_urls TEXT[], -- Array of CNIC/B-Form URLs
+    additional_urls TEXT[], -- Array of additional document URLs
     
     -- Exam Marks
     exam_part1_marks VARCHAR(10) NOT NULL,

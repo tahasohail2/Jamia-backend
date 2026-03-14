@@ -2,6 +2,7 @@ const express = require('express');
 require('dotenv').config();
 
 const { testConnection, closePool } = require('./config/database');
+const { testCloudinaryConnection } = require('./config/cloudinary');
 const corsMiddleware = require('./middleware/cors');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 const recordsRouter = require('./routes/records');
@@ -40,6 +41,9 @@ const startServer = async () => {
       console.error('Failed to connect to database. Exiting...');
       process.exit(1);
     }
+
+    // Test Cloudinary connection
+    testCloudinaryConnection();
 
     // Start listening
     const server = app.listen(PORT, () => {
