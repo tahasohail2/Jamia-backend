@@ -42,7 +42,7 @@ router.post('/login', loginLimiter, async (req, res) => {
     res.cookie('adminToken', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite:"none",
       maxAge: 8 * 60 * 60 * 1000 // 8 hours
     });
 
@@ -50,7 +50,8 @@ router.post('/login', loginLimiter, async (req, res) => {
       user: {
         id: user.id,
         username: user.username
-      }
+      },
+      adminToken:token
     });
   } catch (error) {
     console.error('Login error:', error);
