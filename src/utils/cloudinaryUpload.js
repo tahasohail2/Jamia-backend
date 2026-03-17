@@ -14,7 +14,10 @@ const uploadToCloudinary = (fileBuffer, folder = 'student-documents', resourceTy
       {
         folder: folder,
         resource_type: resourceType,
-        allowed_formats: ['jpg', 'jpeg', 'png', 'gif', 'pdf', 'doc', 'docx']
+        // Don't restrict formats when using 'raw' - let all files through
+        ...(resourceType !== 'raw' && {
+          allowed_formats: ['jpg', 'jpeg', 'png', 'gif', 'pdf', 'doc', 'docx']
+        })
       },
       (error, result) => {
         if (error) {
