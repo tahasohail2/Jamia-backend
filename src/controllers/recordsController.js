@@ -89,24 +89,51 @@ const createRecord = async (req, res, next) => {
         // Upload certificates
         if (req.files.certificates) {
           for (const file of req.files.certificates) {
-            const result = await uploadToCloudinary(file.buffer, 'student-documents/certificates');
-            certificateUrls.push(result.secure_url);
+            const isPDF = file.mimetype === 'application/pdf' || file.originalname.toLowerCase().endsWith('.pdf');
+            const resourceType = isPDF ? 'raw' : 'image';
+            const result = await uploadToCloudinary(file.buffer, 'student-documents/certificates', resourceType);
+            
+            // For PDFs uploaded as 'image', add fl_attachment flag
+            let url = result.secure_url;
+            if (isPDF && url.includes('/image/upload/')) {
+              url = url.replace('/upload/', '/upload/fl_attachment/');
+            }
+            
+            certificateUrls.push(url);
           }
         }
 
         // Upload CNIC documents
         if (req.files.cnicDocuments) {
           for (const file of req.files.cnicDocuments) {
-            const result = await uploadToCloudinary(file.buffer, 'student-documents/cnic');
-            cnicUrls.push(result.secure_url);
+            const isPDF = file.mimetype === 'application/pdf' || file.originalname.toLowerCase().endsWith('.pdf');
+            const resourceType = isPDF ? 'raw' : 'image';
+            const result = await uploadToCloudinary(file.buffer, 'student-documents/cnic', resourceType);
+            
+            // For PDFs uploaded as 'image', add fl_attachment flag
+            let url = result.secure_url;
+            if (isPDF && url.includes('/image/upload/')) {
+              url = url.replace('/upload/', '/upload/fl_attachment/');
+            }
+            
+            cnicUrls.push(url);
           }
         }
 
         // Upload additional documents
         if (req.files.additionalDocuments) {
           for (const file of req.files.additionalDocuments) {
-            const result = await uploadToCloudinary(file.buffer, 'student-documents/additional');
-            additionalUrls.push(result.secure_url);
+            const isPDF = file.mimetype === 'application/pdf' || file.originalname.toLowerCase().endsWith('.pdf');
+            const resourceType = isPDF ? 'raw' : 'image';
+            const result = await uploadToCloudinary(file.buffer, 'student-documents/additional', resourceType);
+            
+            // For PDFs uploaded as 'image', add fl_attachment flag
+            let url = result.secure_url;
+            if (isPDF && url.includes('/image/upload/')) {
+              url = url.replace('/upload/', '/upload/fl_attachment/');
+            }
+            
+            additionalUrls.push(url);
           }
         }
       } catch (uploadError) {
