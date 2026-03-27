@@ -12,6 +12,7 @@
     "setup:db": "node scripts/setupDatabase.js",
     "migrate:education-type": "node scripts/addEducationTypeField.js",
     "migrate:admin": "node scripts/applyAdminMigrations.js",
+    "migrate:approval-status": "node scripts/addApprovalStatus.js",
     "fix:pdf-urls": "node scripts/fixCloudinaryPdfUrls.js"
   },
   "keywords": [

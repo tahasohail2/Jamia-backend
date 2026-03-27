@@ -121,7 +121,8 @@ router.get('/records/export', async (req, res) => {
         total_marks AS "totalMarks",
         remarks,
         additional_urls AS "additionalUrls",
-        submitted_at AS "submittedAt"
+        submitted_at AS "submittedAt",
+        approval_status AS "approvalStatus"
       FROM student_records
       ${whereClause}
       ORDER BY submitted_at DESC
@@ -231,7 +232,8 @@ router.get('/records', async (req, res) => {
         cnic,
         phone,
         registration_no AS "registrationNo",
-        submitted_at AS "submittedAt"
+        submitted_at AS "submittedAt",
+        approval_status AS "approvalStatus"
       FROM student_records
       ${whereClause}
       ORDER BY submitted_at DESC
@@ -287,7 +289,8 @@ router.get('/records/:id', async (req, res) => {
         certificate_urls AS "certificateUrls",
         cnic_urls AS "cnicUrls",
         additional_urls AS "additionalUrls",
-        submitted_at AS "submittedAt"
+        submitted_at AS "submittedAt",
+        approval_status AS "approvalStatus"
       FROM student_records 
       WHERE id = $1`,
       [id]
@@ -301,6 +304,76 @@ router.get('/records/:id', async (req, res) => {
   } catch (error) {
     console.error('Get record error:', error);
     res.status(500).json({ message: 'Failed to fetch record' });
+  }
+});
+
+// PATCH /api/admin/records/:id/approval - Update approval status
+router.patch('/records/:id/approval', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { approvalStatus } = req.body;
+
+    // Validate approval status
+    if (!approvalStatus || !['approved', 'disapproved'].includes(approvalStatus)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid approval status. Must be "approved" or "disapproved"'
+      });
+    }
+
+    // Check if record exists
+    const checkResult = await pool.query(
+      'SELECT id FROM student_records WHERE id = $1',
+      [id]
+    );
+
+    if (checkResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Record not found'
+      });
+    }
+
+    // Update the approval status
+    const updateResult = await pool.query(
+      `UPDATE student_records 
+       SET approval_status = $1, approved_by = $2, approved_at = CURRENT_TIMESTAMP
+       WHERE id = $3
+       RETURNING id, approval_status AS "approvalStatus"`,
+      [approvalStatus, req.user.id, id]
+    );
+
+    // Log the action in audit log (if table exists)
+    try {
+      await pool.query(
+        `INSERT INTO admin_audit_log 
+         (admin_user_id, action, resource_type, resource_id, details, ip_address)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [
+          req.user.id,
+          'UPDATE_APPROVAL',
+          'student_record',
+          id,
+          JSON.stringify({ approvalStatus }),
+          req.ip
+        ]
+      );
+    } catch (auditError) {
+      // Ignore audit log errors if table doesn't exist
+      console.log('Audit log not available:', auditError.message);
+    }
+
+    res.json({
+      success: true,
+      message: 'Approval status updated successfully',
+      data: updateResult.rows[0]
+    });
+  } catch (error) {
+    console.error('Update approval status error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update approval status'
+    });
   }
 });
 

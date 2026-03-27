@@ -1,0 +1,56 @@
+### Test Approval Status Endpoint
+### You can use this file with REST Client extension in VS Code
+
+### 1. Approve a record (replace :id with actual record ID)
+PATCH http://localhost:3000/api/admin/records/1/approval
+Content-Type: application/json
+Cookie: adminToken=your_admin_token_here
+
+{
+  "approvalStatus": "approved"
+}
+
+###
+
+### 2. Disapprove a record
+PATCH http://localhost:3000/api/admin/records/1/approval
+Content-Type: application/json
+Cookie: adminToken=your_admin_token_here
+
+{
+  "approvalStatus": "disapproved"
+}
+
+###
+
+### 3. Test with invalid status (should return 400 error)
+PATCH http://localhost:3000/api/admin/records/1/approval
+Content-Type: application/json
+Cookie: adminToken=your_admin_token_here
+
+{
+  "approvalStatus": "pending"
+}
+
+###
+
+### 4. Test with non-existent record (should return 404 error)
+PATCH http://localhost:3000/api/admin/records/99999/approval
+Content-Type: application/json
+Cookie: adminToken=your_admin_token_here
+
+{
+  "approvalStatus": "approved"
+}
+
+###
+
+### 5. Get all records (should include approvalStatus field)
+GET http://localhost:3000/api/admin/records?page=1&pageSize=10
+Cookie: adminToken=your_admin_token_here
+
+###
+
+### 6. Get single record (should include approvalStatus field)
+GET http://localhost:3000/api/admin/records/1
+Cookie: adminToken=your_admin_token_here
