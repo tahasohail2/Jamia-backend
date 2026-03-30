@@ -1,13 +1,325 @@
 const express = require('express');
 const { pool } = require('../config/database');
+const AdminUser = require('../models/AdminUser');
 const authMiddleware = require('../middleware/authMiddleware');
-const { apiLimiter } = require('../middleware/rateLimiter');
+const superAdminMiddleware = require('../middleware/superAdminMiddleware');
+const { apiLimiter, loginLimiter } = require('../middleware/rateLimiter');
 
 const router = express.Router();
 
 // Apply auth middleware to all routes
 router.use(authMiddleware);
 router.use(apiLimiter);
+
+// POST /api/admin/change-password - Change admin password (SUPER ADMIN ONLY)
+router.post('/change-password', loginLimiter, superAdminMiddleware, async (req, res) => {
+  try {
+    const { userId, newPassword } = req.body;
+
+    // Validation
+    if (!userId || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'User ID and new password are required'
+      });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'New password must be at least 6 characters long'
+      });
+    }
+
+    // Get target user from database
+    const targetUser = await AdminUser.findById(userId);
+
+    if (!targetUser) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Update password
+    await AdminUser.changePassword(userId, newPassword);
+
+    // Log the password change in audit log
+    try {
+      await pool.query(
+        `INSERT INTO admin_audit_log 
+         (admin_user_id, action, resource_type, resource_id, details, ip_address)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [
+          req.user.id,
+          'PASSWORD_CHANGED_BY_SUPER_ADMIN',
+          'admin_user',
+          userId,
+          JSON.stringify({ 
+            targetUsername: targetUser.username,
+            changedBy: req.user.username 
+          }),
+          req.ip
+        ]
+      );
+    } catch (auditError) {
+      console.log('Audit log not available:', auditError.message);
+    }
+
+    res.json({
+      success: true,
+      message: 'Password changed successfully'
+    });
+
+  } catch (error) {
+    console.error('Password change error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to change password'
+    });
+  }
+});
+
+// POST /api/admin/users - Create new admin user (SUPER ADMIN ONLY)
+router.post('/users', superAdminMiddleware, async (req, res) => {
+  try {
+    const { username, password, isSuperAdmin } = req.body;
+
+    // Validation
+    if (!username || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Username and password are required'
+      });
+    }
+
+    if (username.length < 3) {
+      return res.status(400).json({
+        success: false,
+        message: 'Username must be at least 3 characters long'
+      });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password must be at least 6 characters long'
+      });
+    }
+
+    // Check if username already exists
+    const existingUser = await AdminUser.findByUsername(username);
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        message: 'Username already exists'
+      });
+    }
+
+    // Create new user
+    const newUser = await AdminUser.createAdminUser(username, password, isSuperAdmin || false);
+
+    // Log the action
+    try {
+      await pool.query(
+        `INSERT INTO admin_audit_log 
+         (admin_user_id, action, resource_type, resource_id, details, ip_address)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [
+          req.user.id,
+          'USER_CREATED',
+          'admin_user',
+          newUser.id,
+          JSON.stringify({ 
+            username: newUser.username,
+            isSuperAdmin: newUser.is_super_admin,
+            createdBy: req.user.username 
+          }),
+          req.ip
+        ]
+      );
+    } catch (auditError) {
+      console.log('Audit log not available:', auditError.message);
+    }
+
+    res.status(201).json({
+      success: true,
+      message: 'User created successfully',
+      user: {
+        id: newUser.id,
+        username: newUser.username,
+        isSuperAdmin: newUser.is_super_admin,
+        isActive: newUser.is_active,
+        createdAt: newUser.created_at
+      }
+    });
+
+  } catch (error) {
+    console.error('Create user error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to create user'
+    });
+  }
+});
+
+// GET /api/admin/users - Get all admin users (SUPER ADMIN ONLY)
+router.get('/users', superAdminMiddleware, async (req, res) => {
+  try {
+    const users = await AdminUser.getAllUsers();
+
+    res.json({
+      success: true,
+      users: users.map(user => ({
+        id: user.id,
+        username: user.username,
+        isSuperAdmin: user.is_super_admin,
+        isActive: user.is_active,
+        lastLogin: user.last_login,
+        createdAt: user.created_at,
+        updatedAt: user.updated_at
+      }))
+    });
+
+  } catch (error) {
+    console.error('Get users error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch users'
+    });
+  }
+});
+
+// PATCH /api/admin/users/:id/status - Update user active status (SUPER ADMIN ONLY)
+router.patch('/users/:id/status', superAdminMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { isActive } = req.body;
+
+    if (typeof isActive !== 'boolean') {
+      return res.status(400).json({
+        success: false,
+        message: 'isActive must be a boolean value'
+      });
+    }
+
+    // Prevent super admin from deactivating themselves
+    if (parseInt(id) === req.user.id) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot change your own active status'
+      });
+    }
+
+    // Check if user exists
+    const user = await AdminUser.findById(id);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Update status
+    await AdminUser.updateUserStatus(id, isActive);
+
+    // Log the action
+    try {
+      await pool.query(
+        `INSERT INTO admin_audit_log 
+         (admin_user_id, action, resource_type, resource_id, details, ip_address)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [
+          req.user.id,
+          'USER_STATUS_CHANGED',
+          'admin_user',
+          id,
+          JSON.stringify({ 
+            username: user.username,
+            newStatus: isActive,
+            changedBy: req.user.username 
+          }),
+          req.ip
+        ]
+      );
+    } catch (auditError) {
+      console.log('Audit log not available:', auditError.message);
+    }
+
+    res.json({
+      success: true,
+      message: `User ${isActive ? 'activated' : 'deactivated'} successfully`
+    });
+
+  } catch (error) {
+    console.error('Update user status error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update user status'
+    });
+  }
+});
+
+// DELETE /api/admin/users/:id - Delete admin user (SUPER ADMIN ONLY)
+router.delete('/users/:id', superAdminMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Prevent super admin from deleting themselves
+    if (parseInt(id) === req.user.id) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot delete your own account'
+      });
+    }
+
+    // Check if user exists
+    const user = await AdminUser.findById(id);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Delete user
+    await AdminUser.deleteUser(id);
+
+    // Log the action
+    try {
+      await pool.query(
+        `INSERT INTO admin_audit_log 
+         (admin_user_id, action, resource_type, resource_id, details, ip_address)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [
+          req.user.id,
+          'USER_DELETED',
+          'admin_user',
+          id,
+          JSON.stringify({ 
+            username: user.username,
+            deletedBy: req.user.username 
+          }),
+          req.ip
+        ]
+      );
+    } catch (auditError) {
+      console.log('Audit log not available:', auditError.message);
+    }
+
+    res.json({
+      success: true,
+      message: 'User deleted successfully'
+    });
+
+  } catch (error) {
+    console.error('Delete user error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete user'
+    });
+  }
+});
 
 // GET /api/admin/proxy-pdf - Proxy PDF files from Cloudinary to avoid CORS/iframe issues
 router.get('/proxy-pdf', async (req, res) => {
