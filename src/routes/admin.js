@@ -313,13 +313,18 @@ router.patch('/records/:id/approval', async (req, res) => {
     const { id } = req.params;
     const { approvalStatus } = req.body;
 
-    // Validate approval status
-    if (!approvalStatus || !['approved', 'disapproved'].includes(approvalStatus)) {
+    // Validate approval status - accept 'approved', 'disapproved', 'pending', or null
+    const validStatuses = ['approved', 'disapproved', 'pending', null];
+    
+    if (!validStatuses.includes(approvalStatus)) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid approval status. Must be "approved" or "disapproved"'
+        message: 'Invalid approval status. Must be "approved", "disapproved", "pending", or null'
       });
     }
+    
+    // Convert 'pending' to null for database storage
+    const statusValue = approvalStatus === 'pending' ? null : approvalStatus;
 
     // Check if record exists
     const checkResult = await pool.query(
@@ -335,13 +340,22 @@ router.patch('/records/:id/approval', async (req, res) => {
     }
 
     // Update the approval status
-    const updateResult = await pool.query(
-      `UPDATE student_records 
-       SET approval_status = $1, approved_by = $2, approved_at = CURRENT_TIMESTAMP
-       WHERE id = $3
-       RETURNING id, approval_status AS "approvalStatus"`,
-      [approvalStatus, req.user.id, id]
-    );
+    // If resetting to pending (null), clear approved_by and approved_at
+    const updateResult = statusValue === null
+      ? await pool.query(
+          `UPDATE student_records 
+           SET approval_status = NULL, approved_by = NULL, approved_at = NULL
+           WHERE id = $1
+           RETURNING id, approval_status AS "approvalStatus"`,
+          [id]
+        )
+      : await pool.query(
+          `UPDATE student_records 
+           SET approval_status = $1, approved_by = $2, approved_at = CURRENT_TIMESTAMP
+           WHERE id = $3
+           RETURNING id, approval_status AS "approvalStatus"`,
+          [statusValue, req.user.id, id]
+        );
 
     // Log the action in audit log (if table exists)
     try {
