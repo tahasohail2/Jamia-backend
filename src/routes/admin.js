@@ -368,7 +368,7 @@ router.get('/proxy-pdf', async (req, res) => {
 // GET /api/admin/records/export - Export records as CSV
 router.get('/records/export', async (req, res) => {
   try {
-    const { search, admissionType, gender, department } = req.query;
+    const { search, admissionType, gender, department, approvalStatus } = req.query;
 
     let whereConditions = [];
     let queryParams = [];
@@ -402,6 +402,18 @@ router.get('/records/export', async (req, res) => {
       whereConditions.push('department = $' + paramIndex);
       queryParams.push(department);
       paramIndex++;
+    }
+
+    // Approval Status Filter
+    if (approvalStatus) {
+      if (approvalStatus === 'pending') {
+        // For pending, match ONLY NULL values (records with no status set)
+        whereConditions.push('approval_status IS NULL');
+      } else {
+        whereConditions.push('approval_status = $' + paramIndex);
+        queryParams.push(approvalStatus);
+        paramIndex++;
+      }
     }
 
     const whereClause = whereConditions.length > 0
@@ -479,7 +491,8 @@ router.get('/records', async (req, res) => {
       search,
       admissionType,
       gender,
-      department
+      department,
+      approvalStatus
     } = req.query;
 
     const offset = (page - 1) * pageSize;
@@ -515,6 +528,18 @@ router.get('/records', async (req, res) => {
       whereConditions.push('department = $' + paramIndex);
       queryParams.push(department);
       paramIndex++;
+    }
+
+    // Approval Status Filter
+    if (approvalStatus) {
+      if (approvalStatus === 'pending') {
+        // For pending, match ONLY NULL values (records with no status set)
+        whereConditions.push('approval_status IS NULL');
+      } else {
+        whereConditions.push('approval_status = $' + paramIndex);
+        queryParams.push(approvalStatus);
+        paramIndex++;
+      }
     }
 
     const whereClause = whereConditions.length > 0
