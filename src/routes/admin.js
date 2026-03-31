@@ -365,6 +365,92 @@ router.get('/proxy-pdf', async (req, res) => {
   }
 });
 
+// Helper function to format date/time
+function formatDateTime(dateString) {
+  if (!dateString) return '';
+  const date = new Date(dateString);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${year}/${month}/${day} (${hours}:${minutes})`;
+}
+
+// Helper function to generate CSV with Urdu headers
+function generateCSVWithUrduHeaders(records) {
+  if (records.length === 0) {
+    return '';
+  }
+
+  // Define Urdu headers
+  const headers = [
+    'داخلہ نمبر',           // Registration Number
+    'طالب علم کا نام',      // Student Name
+    'والد کا نام',         // Father Name
+    'داخلہ کی قسم',        // Admission Type
+    'جنس',                 // Gender
+    'شعبہ',                // Department
+    'تعلیم کی قسم',        // Education Type
+    'تاریخ پیدائش',        // Date of Birth
+    'شناختی کارڈ',         // CNIC
+    'فون',                 // Phone
+    'واٹس ایپ',            // WhatsApp
+    'مستقل پتہ',           // Full Address
+    'موجودہ پتہ',          // Current Address
+    'مطلوبہ جماعت',        // Required Grade
+    'سابقہ تعلیم',         // Previous Education
+    'گزشتہ سال کی جماعت',  // Last Year Grade
+    'اگلے سال کی جماعت',   // Next Year Grade
+    'ملاحظات',             // Remarks
+    'جمع کرانے کا وقت'     // Submitted At
+  ];
+
+  // Helper function to escape CSV values
+  function escapeCSV(value) {
+    if (value === null || value === undefined) {
+      return 'غیر متعین';  // "Not Specified" in Urdu
+    }
+    const stringValue = String(value);
+    // Escape double quotes and wrap in quotes if contains comma, newline, or quote
+    if (stringValue.includes(',') || stringValue.includes('\n') || stringValue.includes('"')) {
+      return `"${stringValue.replace(/"/g, '""')}"`;
+    }
+    return stringValue;
+  }
+
+  // Create CSV rows
+  const rows = records.map(record => [
+    escapeCSV(record.registration_no || 'غیر متعین'),
+    escapeCSV(record.student_name),
+    escapeCSV(record.father_name),
+    escapeCSV(record.admission_type),
+    escapeCSV(record.gender),
+    escapeCSV(record.department),
+    escapeCSV(record.education_type),
+    escapeCSV(record.dob),
+    escapeCSV(record.cnic),
+    escapeCSV(record.phone),
+    escapeCSV(record.whatsapp),
+    escapeCSV(record.full_address),
+    escapeCSV(record.current_address),
+    escapeCSV(record.required_grade),
+    escapeCSV(record.previous_education),
+    escapeCSV(record.last_year_grade),
+    escapeCSV(record.next_year_grade),
+    escapeCSV(record.remarks),
+    escapeCSV(formatDateTime(record.submitted_at))
+  ]);
+
+  // Combine headers and rows
+  const csvLines = [
+    headers.join(','),
+    ...rows.map(row => row.join(','))
+  ];
+
+  return csvLines.join('\n');
+}
+
 // GET /api/admin/records/export - Export records as CSV
 router.get('/records/export', async (req, res) => {
   try {
@@ -422,31 +508,25 @@ router.get('/records/export', async (req, res) => {
 
     const query = `
       SELECT 
-        id,
-        student_name AS "studentName",
-        father_name AS "fatherName",
-        admission_type AS "admissionType",
+        registration_no,
+        student_name,
+        father_name,
+        admission_type,
         gender,
         department,
-        education_type AS "educationType",
+        education_type,
         dob,
         cnic,
         phone,
         whatsapp,
-        full_address AS "fullAddress",
-        current_address AS "currentAddress",
-        required_grade AS "requiredGrade",
-        previous_education AS "previousEducation",
-        registration_no AS "registrationNo",
-        last_year_grade AS "lastYearGrade",
-        next_year_grade AS "nextYearGrade",
-        exam_part1_marks AS "examPart1Marks",
-        exam_part2_marks AS "examPart2Marks",
-        total_marks AS "totalMarks",
+        full_address,
+        current_address,
+        required_grade,
+        previous_education,
+        last_year_grade,
+        next_year_grade,
         remarks,
-        additional_urls AS "additionalUrls",
-        submitted_at AS "submittedAt",
-        approval_status AS "approvalStatus"
+        submitted_at
       FROM student_records
       ${whereClause}
       ORDER BY submitted_at DESC
@@ -458,24 +538,14 @@ router.get('/records/export', async (req, res) => {
       return res.status(404).json({ message: 'No records found to export' });
     }
 
-    // Generate CSV
-    const headers = Object.keys(result.rows[0]);
-    const csvRows = [headers.join(',')];
+    // Generate CSV with Urdu headers
+    const csv = generateCSVWithUrduHeaders(result.rows);
 
-    for (const row of result.rows) {
-      const values = headers.map(header => {
-        const value = row[header];
-        if (value === null || value === undefined || value === '') return '';
-        return '"' + String(value).replace(/"/g, '""') + '"';
-      });
-      csvRows.push(values.join(','));
-    }
-
-    const csv = csvRows.join('\n');
-
-    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename=student-records.csv');
-    res.send(csv);
+    
+    // Add BOM for proper UTF-8 encoding in Excel
+    res.send('\uFEFF' + csv);
   } catch (error) {
     console.error('Export error:', error);
     res.status(500).json({ message: 'Failed to export records' });
