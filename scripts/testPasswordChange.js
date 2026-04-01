@@ -59,9 +59,8 @@ async function testPasswordChange() {
 
     console.log('\n=== All Tests Passed! ===');
     console.log('\n✅ Password change feature is working correctly!');
-    console.log('\n⚠️  IMPORTANT: The test changed the admin password to:');
-    console.log(`   ${testPassword}`);
-    console.log('\nYou should change it back or use the frontend to set a proper password.\n');
+    console.log('\n⚠️  IMPORTANT: The test changed the admin password.');
+    console.log('You should change it back or use the frontend to set a proper password.\n');
 
     process.exit(0);
 

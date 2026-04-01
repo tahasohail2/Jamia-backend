@@ -43,13 +43,11 @@ app.use(errorHandler);
 const startServer = async () => {
   try {
     // Test database connection (non-blocking)
-    console.log(`[${new Date().toISOString()}] Starting server...`);
     const connected = await testConnection();
     
     if (!connected) {
       console.warn('⚠️  Database connection failed, but server will start anyway.');
-      console.warn('⚠️  The database will reconnect automatically on first request.');
-      console.warn('⚠️  This is normal for Neon free tier (database sleeps after inactivity).\n');
+      console.warn('⚠️  The database will reconnect automatically on first request.\n');
     }
 
     // Test Cloudinary connection
@@ -60,7 +58,6 @@ const startServer = async () => {
       console.log(`[${new Date().toISOString()}] Server running on port ${PORT}`);
       console.log(`  Environment: ${process.env.NODE_ENV || 'development'}`);
       console.log(`  Health check: http://localhost:${PORT}/health`);
-      console.log(`  Listening on: 0.0.0.0:${PORT}`);
       if (!connected) {
         console.log(`  ⚠️  Database will connect on first request`);
       }
@@ -69,10 +66,8 @@ const startServer = async () => {
     // Graceful shutdown
     const shutdown = async (signal) => {
       console.log(`\n[${new Date().toISOString()}] ${signal} received. Shutting down gracefully...`);
-      console.log(`  If you didn't press Ctrl+C, check for conflicting processes.`);
       
       server.close(async () => {
-        console.log(`[${new Date().toISOString()}] HTTP server closed`);
         await closePool();
         process.exit(0);
       });
@@ -86,12 +81,9 @@ const startServer = async () => {
 
     process.on('SIGTERM', () => shutdown('SIGTERM'));
     process.on('SIGINT', () => shutdown('SIGINT'));
-    
-    // Log that server is ready
-    console.log(`\n✅ Server is ready! Press Ctrl+C to stop.\n`);
 
   } catch (error) {
-    console.error(`[${new Date().toISOString()}] Failed to start server:`, error);
+    console.error(`[${new Date().toISOString()}] Failed to start server`);
     process.exit(1);
   }
 };

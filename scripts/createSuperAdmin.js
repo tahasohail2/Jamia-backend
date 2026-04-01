@@ -86,8 +86,6 @@ async function createSuperAdmin() {
     console.log('  Username:', newAdmin.username);
     console.log('  Created:', newAdmin.created_at);
     console.log('\n⚠️  IMPORTANT: Store these credentials securely!');
-    console.log('  Username:', username);
-    console.log('  Password:', password);
     console.log('\n💡 You can change the password after logging in.\n');
 
     rl.close();

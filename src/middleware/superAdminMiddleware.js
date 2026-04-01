@@ -50,7 +50,7 @@ const superAdminMiddleware = async (req, res, next) => {
     next();
 
   } catch (error) {
-    console.error('Super admin check error:', error);
+    console.error('Super admin check error: Authorization check failed');
     res.status(500).json({
       success: false,
       message: 'Failed to verify admin privileges'

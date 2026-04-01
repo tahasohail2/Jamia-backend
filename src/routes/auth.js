@@ -56,7 +56,7 @@ router.post('/login', loginLimiter, async (req, res) => {
       adminToken:token
     });
   } catch (error) {
-    console.error('Login error:', error);
+    console.error('Login error: Authentication failed');
     res.status(500).json({ message: 'Internal server error' });
   }
 });
@@ -85,7 +85,7 @@ router.get('/verify', authMiddleware, async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Verify error:', error);
+    console.error('Verify error: User verification failed');
     res.status(500).json({ message: 'Failed to verify user' });
   }
 });
@@ -165,8 +165,7 @@ router.post('/change-password', authMiddleware, loginLimiter, async (req, res) =
         ]
       );
     } catch (auditError) {
-      // Ignore audit log errors if table doesn't exist
-      console.log('Audit log not available:', auditError.message);
+      // Audit log table doesn't exist - skip logging
     }
 
     res.json({
@@ -175,7 +174,7 @@ router.post('/change-password', authMiddleware, loginLimiter, async (req, res) =
     });
 
   } catch (error) {
-    console.error('Password change error:', error);
+    console.error('Password change error: Failed to change password');
     res.status(500).json({
       success: false,
       message: 'Failed to change password'

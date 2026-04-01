@@ -15,11 +15,9 @@ const testCloudinaryConnection = () => {
       console.warn('[Cloudinary] Warning: Cloudinary credentials not configured');
       return false;
     }
-    console.log(`[${new Date().toISOString()}] Cloudinary configured successfully`);
-    console.log(`  Cloud Name: ${process.env.CLOUDINARY_CLOUD_NAME}`);
     return true;
   } catch (error) {
-    console.error(`[${new Date().toISOString()}] Cloudinary configuration failed:`, error.message);
+    console.error(`[${new Date().toISOString()}] Cloudinary configuration failed`);
     return false;
   }
 };
