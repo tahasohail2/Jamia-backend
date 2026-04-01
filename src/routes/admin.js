@@ -63,7 +63,7 @@ router.post('/change-password', loginLimiter, superAdminMiddleware, async (req, 
         ]
       );
     } catch (auditError) {
-      console.log('Audit log not available:', auditError.message);
+      // Audit log table doesn't exist - skip logging
     }
 
     res.json({
@@ -72,7 +72,7 @@ router.post('/change-password', loginLimiter, superAdminMiddleware, async (req, 
     });
 
   } catch (error) {
-    console.error('Password change error:', error);
+    console.error('Password change error: Failed to change admin password');
     res.status(500).json({
       success: false,
       message: 'Failed to change password'
@@ -139,7 +139,7 @@ router.post('/users', superAdminMiddleware, async (req, res) => {
         ]
       );
     } catch (auditError) {
-      console.log('Audit log not available:', auditError.message);
+      // Audit log table doesn't exist - skip logging
     }
 
     res.status(201).json({
@@ -155,7 +155,7 @@ router.post('/users', superAdminMiddleware, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Create user error:', error);
+    console.error('Create user error: Failed to create admin user');
     res.status(500).json({
       success: false,
       message: 'Failed to create user'
@@ -182,7 +182,7 @@ router.get('/users', superAdminMiddleware, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Get users error:', error);
+    console.error('Get users error: Failed to fetch admin users');
     res.status(500).json({
       success: false,
       message: 'Failed to fetch users'
@@ -243,7 +243,7 @@ router.patch('/users/:id/status', superAdminMiddleware, async (req, res) => {
         ]
       );
     } catch (auditError) {
-      console.log('Audit log not available:', auditError.message);
+      // Audit log table doesn't exist - skip logging
     }
 
     res.json({
@@ -252,7 +252,7 @@ router.patch('/users/:id/status', superAdminMiddleware, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Update user status error:', error);
+    console.error('Update user status error: Failed to update admin user status');
     res.status(500).json({
       success: false,
       message: 'Failed to update user status'
@@ -304,7 +304,7 @@ router.delete('/users/:id', superAdminMiddleware, async (req, res) => {
         ]
       );
     } catch (auditError) {
-      console.log('Audit log not available:', auditError.message);
+      // Audit log table doesn't exist - skip logging
     }
 
     res.json({
@@ -313,7 +313,7 @@ router.delete('/users/:id', superAdminMiddleware, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Delete user error:', error);
+    console.error('Delete user error: Failed to delete admin user');
     res.status(500).json({
       success: false,
       message: 'Failed to delete user'
@@ -360,7 +360,7 @@ router.get('/proxy-pdf', async (req, res) => {
     response.pipe(res);
 
   } catch (error) {
-    console.error('PDF proxy error:', error);
+    console.error('PDF proxy error: Failed to load PDF document');
     res.status(500).json({ message: 'Failed to load PDF' });
   }
 });
@@ -547,7 +547,7 @@ router.get('/records/export', async (req, res) => {
     // Add BOM for proper UTF-8 encoding in Excel
     res.send('\uFEFF' + csv);
   } catch (error) {
-    console.error('Export error:', error);
+    console.error('Export error: Failed to export student records');
     res.status(500).json({ message: 'Failed to export records' });
   }
 });
@@ -659,7 +659,7 @@ router.get('/records', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Get records error:', error);
+    console.error('Get records error: Failed to fetch student records');
     res.status(500).json({ message: 'Failed to fetch records' });
   }
 });
@@ -709,7 +709,7 @@ router.get('/records/:id', async (req, res) => {
 
     res.json(result.rows[0]);
   } catch (error) {
-    console.error('Get record error:', error);
+    console.error('Get record error: Failed to fetch student record');
     res.status(500).json({ message: 'Failed to fetch record' });
   }
 });
@@ -780,8 +780,7 @@ router.patch('/records/:id/approval', async (req, res) => {
         ]
       );
     } catch (auditError) {
-      // Ignore audit log errors if table doesn't exist
-      console.log('Audit log not available:', auditError.message);
+      // Audit log table doesn't exist - skip logging
     }
 
     res.json({
@@ -790,7 +789,7 @@ router.patch('/records/:id/approval', async (req, res) => {
       data: updateResult.rows[0]
     });
   } catch (error) {
-    console.error('Update approval status error:', error);
+    console.error('Update approval status error: Failed to update approval status');
     res.status(500).json({
       success: false,
       message: 'Failed to update approval status'
@@ -830,7 +829,7 @@ router.delete('/records/:id', async (req, res) => {
 
     res.json({ message: 'Record deleted successfully' });
   } catch (error) {
-    console.error('Delete record error:', error);
+    console.error('Delete record error: Failed to delete student record');
     res.status(500).json({ message: 'Failed to delete record' });
   }
 });

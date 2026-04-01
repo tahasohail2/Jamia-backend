@@ -56,9 +56,8 @@ beforeAll(async () => {
       CREATE INDEX IF NOT EXISTS idx_student_records_submitted_at ON student_records(submitted_at DESC);
     `);
 
-    console.log('Test database schema created');
   } catch (error) {
-    console.error('Error creating test schema:', error);
+    console.error('Error creating test schema');
     throw error;
   }
 });
@@ -68,7 +67,7 @@ beforeEach(async () => {
   try {
     await testPool.query('DELETE FROM student_records');
   } catch (error) {
-    console.error('Error clearing test data:', error);
+    console.error('Error clearing test data');
     throw error;
   }
 });
@@ -77,9 +76,8 @@ beforeEach(async () => {
 afterAll(async () => {
   try {
     await testPool.end();
-    console.log('Test database connection closed');
   } catch (error) {
-    console.error('Error closing test pool:', error);
+    console.error('Error closing test pool');
   }
 });
 

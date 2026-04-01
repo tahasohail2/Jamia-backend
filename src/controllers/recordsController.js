@@ -137,7 +137,7 @@ const createRecord = async (req, res, next) => {
           }
         }
       } catch (uploadError) {
-        console.error('Cloudinary upload error:', uploadError);
+        console.error('Cloudinary upload error: Failed to upload document');
         return res.status(500).json({
           status: 'error',
           message: 'Failed to upload documents',
@@ -273,7 +273,6 @@ const deleteRecordById = async (req, res, next) => {
         const publicId = url.split('/').slice(-2).join('/').split('.')[0];
         await deleteFromCloudinary(publicId);
       } catch (cloudinaryError) {
-        console.error('Cloudinary deletion error:', cloudinaryError);
         // Continue with database deletion even if Cloudinary fails
       }
     }

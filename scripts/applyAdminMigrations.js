@@ -31,8 +31,7 @@ async function applyMigrations() {
     if (result.rows.length > 0) {
       console.log('✓ Default admin user exists');
       console.log('  Username: admin');
-      console.log('  Password: admin123');
-      console.log('  (Please change this password in production!)\n');
+      console.log('  ⚠️  Please change the default password immediately!\n');
     }
 
     console.log('All migrations completed successfully!');

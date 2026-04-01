@@ -36,14 +36,8 @@ const handleDatabaseError = (error) => {
 
 // Global error handler middleware
 const errorHandler = (err, req, res, next) => {
-  // Log error details
-  console.error(`[${new Date().toISOString()}] Error:`, {
-    message: err.message,
-    stack: err.stack,
-    path: req.path,
-    method: req.method,
-    body: req.body
-  });
+  // Log error without exposing sensitive details
+  console.error(`[${new Date().toISOString()}] Error: ${err.message}`);
   
   // Handle database errors
   if (err.code) {

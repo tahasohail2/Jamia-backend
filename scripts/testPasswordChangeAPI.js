@@ -4,8 +4,8 @@ const { pool } = require('../src/config/database');
 // Configuration
 const BASE_URL = 'http://localhost:3000';
 const TEST_USERNAME = 'admin';
-const CURRENT_PASSWORD = 'test_password_1774878275062'; // From previous test
-const NEW_PASSWORD = 'admin123'; // Change to your desired password
+const CURRENT_PASSWORD = process.env.TEST_CURRENT_PASSWORD || 'test_password_1774878275062';
+const NEW_PASSWORD = process.env.TEST_NEW_PASSWORD || 'admin123';
 
 // Helper function to make HTTP requests
 function makeRequest(method, path, data, cookie) {
@@ -75,7 +75,6 @@ async function testPasswordChangeAPI() {
       console.log('\n⚠️  Make sure:');
       console.log('   1. Server is running (npm start)');
       console.log('   2. Username and password are correct');
-      console.log(`   3. Current password is: ${CURRENT_PASSWORD}`);
       process.exit(1);
     }
 
@@ -89,8 +88,6 @@ async function testPasswordChangeAPI() {
       console.log('❌ No cookie received from login');
       process.exit(1);
     }
-    
-    console.log(`   Token: ${cookie.substring(0, 50)}...`);
 
     // Step 2: Test password change
     console.log('\nStep 2: Change password');
@@ -151,16 +148,12 @@ async function testPasswordChangeAPI() {
       console.log('✅ Audit log entry created');
       console.log('   Action:', auditLog.rows[0].action);
       console.log('   Time:', auditLog.rows[0].created_at);
-      console.log('   IP:', auditLog.rows[0].ip_address || 'N/A');
     } else {
       console.log('⚠️  No audit log entry found (table might not exist)');
     }
 
     console.log('\n=== All API Tests Passed! ===');
     console.log('\n✅ Password change API is working correctly!');
-    console.log('\n📝 New credentials:');
-    console.log(`   Username: ${TEST_USERNAME}`);
-    console.log(`   Password: ${NEW_PASSWORD}`);
     console.log('\nYou can now use the frontend to change the password.\n');
 
     process.exit(0);
