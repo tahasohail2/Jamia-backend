@@ -347,11 +347,124 @@ const getRecordByCnic = async (req, res, next) => {
   }
 };
 
+// PATCH /api/records/:id/picture - Update only the picture for a record
+const updateRecordPicture = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    // Find the existing record
+    const selectQuery = `
+      SELECT id, student_name, additional_urls 
+      FROM student_records 
+      WHERE id = $1
+    `;
+    const selectResult = await pool.query(selectQuery, [id]);
+
+    if (selectResult.rows.length === 0) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'ریکارڈ نہیں ملا',
+        details: { id }
+      });
+    }
+
+    const record = selectResult.rows[0];
+    let additionalUrls = [];
+
+    // Handle file uploads
+    if (req.files && req.files.additionalDocuments) {
+      try {
+        // Delete old pictures from Cloudinary
+        if (record.additional_urls && record.additional_urls.length > 0) {
+          for (const url of record.additional_urls) {
+            try {
+              // Extract public_id from URL more reliably
+              // URL format: https://res.cloudinary.com/cloud-name/image/upload/v123456/folder/file.jpg
+              const urlParts = url.split('/upload/');
+              if (urlParts.length > 1) {
+                // Get everything after /upload/ and remove file extension
+                const pathWithVersion = urlParts[1];
+                // Remove version number (v123456/)
+                const pathWithoutVersion = pathWithVersion.replace(/^v\d+\//, '');
+                // Remove file extension
+                const publicId = pathWithoutVersion.replace(/\.[^/.]+$/, '');
+                
+                // Determine resource type from URL
+                let resourceType = 'image';
+                if (url.includes('/raw/upload/')) {
+                  resourceType = 'raw';
+                } else if (url.includes('/image/upload/')) {
+                  resourceType = 'image';
+                }
+                
+                await deleteFromCloudinary(publicId, resourceType);
+              }
+            } catch (deleteError) {
+              // Log but continue - deletion failure shouldn't block upload
+              console.error('Failed to delete old picture from Cloudinary');
+            }
+          }
+        }
+
+        // Upload new pictures
+        for (const file of req.files.additionalDocuments) {
+          const isPDF = file.mimetype === 'application/pdf' || file.originalname.toLowerCase().endsWith('.pdf');
+          const resourceType = isPDF ? 'raw' : 'image';
+          const result = await uploadToCloudinary(file.buffer, 'student-documents/additional', resourceType);
+          
+          // For PDFs uploaded as 'image', add fl_attachment flag
+          let url = result.secure_url;
+          if (isPDF && url.includes('/image/upload/')) {
+            url = url.replace('/upload/', '/upload/fl_attachment/');
+          }
+          
+          additionalUrls.push(url);
+        }
+      } catch (uploadError) {
+        console.error('Cloudinary upload error: Failed to upload document');
+        return res.status(500).json({
+          status: 'error',
+          message: 'تصویر اپ ڈیٹ کرنے میں خرابی',
+          details: uploadError.message
+        });
+      }
+    } else {
+      return res.status(400).json({
+        status: 'error',
+        message: 'کوئی تصویر فراہم نہیں کی گئی',
+        details: 'No picture files provided'
+      });
+    }
+
+    // Update only the additional_urls field
+    const updateQuery = `
+      UPDATE student_records 
+      SET additional_urls = $1 
+      WHERE id = $2 
+      RETURNING *
+    `;
+    const updateResult = await pool.query(updateQuery, [additionalUrls, id]);
+
+    // Map the result to API response format
+    const updatedRecord = mapRowToRecord(updateResult.rows[0]);
+
+    res.status(200).json({
+      status: 'success',
+      message: 'تصویر کامیابی سے اپ ڈیٹ ہو گئی',
+      data: updatedRecord
+    });
+
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   createRecord,
   getAllRecords,
   getRecordById,
   getRecordByCnic,
   deleteRecordById,
-  deleteAllRecords
+  deleteAllRecords,
+  updateRecordPicture
 };

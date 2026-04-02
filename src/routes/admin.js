@@ -640,7 +640,8 @@ router.get('/records', async (req, res) => {
         phone,
         registration_no AS "registrationNo",
         submitted_at AS "submittedAt",
-        approval_status AS "approvalStatus"
+        approval_status AS "approvalStatus",
+        additional_urls AS "additionalUrls"
       FROM student_records
       ${whereClause}
       ORDER BY submitted_at DESC
@@ -649,8 +650,17 @@ router.get('/records', async (req, res) => {
 
     const dataResult = await pool.query(dataQuery, queryParams);
 
+    // Format the response to include pictureUrl for easier frontend access
+    const formattedData = dataResult.rows.map(record => ({
+      ...record,
+      pictureUrl: record.additionalUrls && record.additionalUrls.length > 0 
+        ? record.additionalUrls[0] 
+        : null,
+      additionalUrls: record.additionalUrls || []
+    }));
+
     res.json({
-      data: dataResult.rows,
+      data: formattedData,
       pagination: {
         currentPage: parseInt(page),
         pageSize: parseInt(pageSize),
