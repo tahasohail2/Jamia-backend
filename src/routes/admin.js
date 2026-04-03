@@ -807,6 +807,131 @@ router.patch('/records/:id/approval', async (req, res) => {
   }
 });
 
+// PUT /api/admin/records/:id - Update record fields (no file uploads)
+router.put('/records/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Allowed editable fields (camelCase -> snake_case mapping)
+    const fieldMap = {
+      studentName: 'student_name',
+      fatherName: 'father_name',
+      dob: 'dob',
+      cnic: 'cnic',
+      phone: 'phone',
+      whatsapp: 'whatsapp',
+      fullAddress: 'full_address',
+      currentAddress: 'current_address',
+      gender: 'gender',
+      department: 'department',
+      admissionType: 'admission_type',
+      educationType: 'education_type',
+      requiredGrade: 'required_grade',
+      previousEducation: 'previous_education',
+      registrationNo: 'registration_no',
+      lastYearGrade: 'last_year_grade',
+      nextYearGrade: 'next_year_grade',
+      remarks: 'remarks'
+    };
+
+    // Build SET clause from only the fields present in the request body
+    const setClauses = [];
+    const values = [];
+    let paramIndex = 1;
+
+    for (const [camelKey, snakeKey] of Object.entries(fieldMap)) {
+      if (req.body[camelKey] !== undefined) {
+        setClauses.push(`${snakeKey} = $${paramIndex}`);
+        values.push(req.body[camelKey]);
+        paramIndex++;
+      }
+    }
+
+    if (setClauses.length === 0) {
+      return res.status(400).json({ message: 'No valid fields to update' });
+    }
+
+    // Check record exists
+    const checkResult = await pool.query(
+      'SELECT id FROM student_records WHERE id = $1',
+      [id]
+    );
+    if (checkResult.rows.length === 0) {
+      return res.status(404).json({ message: 'Record not found' });
+    }
+
+    // If CNIC is being updated, check uniqueness against other records
+    if (req.body.cnic !== undefined) {
+      const cnicCheck = await pool.query(
+        'SELECT id FROM student_records WHERE cnic = $1 AND id != $2',
+        [req.body.cnic, id]
+      );
+      if (cnicCheck.rows.length > 0) {
+        return res.status(400).json({ message: 'CNIC already exists for another record' });
+      }
+    }
+
+    // Execute update and return full record
+    values.push(id);
+    const updateQuery = `
+      UPDATE student_records
+      SET ${setClauses.join(', ')}
+      WHERE id = $${paramIndex}
+      RETURNING
+        id,
+        student_name AS "studentName",
+        father_name AS "fatherName",
+        admission_type AS "admissionType",
+        gender,
+        department,
+        education_type AS "educationType",
+        dob,
+        cnic,
+        phone,
+        whatsapp,
+        full_address AS "fullAddress",
+        current_address AS "currentAddress",
+        required_grade AS "requiredGrade",
+        previous_education AS "previousEducation",
+        registration_no AS "registrationNo",
+        last_year_grade AS "lastYearGrade",
+        next_year_grade AS "nextYearGrade",
+        remarks,
+        certificate_urls AS "certificateUrls",
+        cnic_urls AS "cnicUrls",
+        additional_urls AS "additionalUrls",
+        submitted_at AS "submittedAt",
+        approval_status AS "approvalStatus"
+    `;
+
+    const result = await pool.query(updateQuery, values);
+
+    // Audit log
+    try {
+      await pool.query(
+        `INSERT INTO admin_audit_log
+         (admin_user_id, action, resource_type, resource_id, details, ip_address)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [
+          req.user.id,
+          'UPDATE_RECORD',
+          'student_record',
+          id,
+          JSON.stringify({ updatedFields: Object.keys(req.body).filter(k => fieldMap[k]) }),
+          req.ip
+        ]
+      );
+    } catch (auditError) {
+      // Audit log table doesn't exist - skip
+    }
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Update record error: Failed to update student record');
+    res.status(500).json({ message: 'Failed to update record' });
+  }
+});
+
 // DELETE /api/admin/records/:id - Delete record
 router.delete('/records/:id', async (req, res) => {
   try {
