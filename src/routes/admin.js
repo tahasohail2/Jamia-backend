@@ -454,7 +454,7 @@ function generateCSVWithUrduHeaders(records) {
 // GET /api/admin/records/export - Export records as CSV
 router.get('/records/export', async (req, res) => {
   try {
-    const { search, admissionType, gender, department, approvalStatus } = req.query;
+    const { search, admissionType, gender, department, approvalStatus, migrationBatchId } = req.query;
 
     let whereConditions = [];
     let queryParams = [];
@@ -498,6 +498,17 @@ router.get('/records/export', async (req, res) => {
       } else {
         whereConditions.push('approval_status = $' + paramIndex);
         queryParams.push(approvalStatus);
+        paramIndex++;
+      }
+    }
+
+    // Migration Batch Filter
+    if (migrationBatchId) {
+      if (migrationBatchId === 'not_migrated') {
+        whereConditions.push('migration_batch_id IS NULL');
+      } else {
+        whereConditions.push('migration_batch_id = $' + paramIndex);
+        queryParams.push(migrationBatchId);
         paramIndex++;
       }
     }
@@ -562,7 +573,8 @@ router.get('/records', async (req, res) => {
       admissionType,
       gender,
       department,
-      approvalStatus
+      approvalStatus,
+      migrationBatchId
     } = req.query;
 
     const offset = (page - 1) * pageSize;
@@ -612,6 +624,17 @@ router.get('/records', async (req, res) => {
       }
     }
 
+    // Migration Batch Filter
+    if (migrationBatchId) {
+      if (migrationBatchId === 'not_migrated') {
+        whereConditions.push('migration_batch_id IS NULL');
+      } else {
+        whereConditions.push('migration_batch_id = $' + paramIndex);
+        queryParams.push(migrationBatchId);
+        paramIndex++;
+      }
+    }
+
     const whereClause = whereConditions.length > 0
       ? 'WHERE ' + whereConditions.join(' AND ')
       : '';
@@ -641,7 +664,10 @@ router.get('/records', async (req, res) => {
         registration_no AS "registrationNo",
         submitted_at AS "submittedAt",
         approval_status AS "approvalStatus",
-        additional_urls AS "additionalUrls"
+        approved_at AS "approvedAt",
+        additional_urls AS "additionalUrls",
+        migration_batch_id AS "migrationBatchId",
+        migrated_at AS "migratedAt"
       FROM student_records
       ${whereClause}
       ORDER BY submitted_at DESC
@@ -707,7 +733,11 @@ router.get('/records/:id', async (req, res) => {
         cnic_urls AS "cnicUrls",
         additional_urls AS "additionalUrls",
         submitted_at AS "submittedAt",
-        approval_status AS "approvalStatus"
+        approval_status AS "approvalStatus",
+        approved_at AS "approvedAt",
+        approval_comments AS "approvalComments",
+        migration_batch_id AS "migrationBatchId",
+        migrated_at AS "migratedAt"
       FROM student_records 
       WHERE id = $1`,
       [id]
@@ -831,7 +861,8 @@ router.put('/records/:id', async (req, res) => {
       registrationNo: 'registration_no',
       lastYearGrade: 'last_year_grade',
       nextYearGrade: 'next_year_grade',
-      remarks: 'remarks'
+      remarks: 'remarks',
+      approvalComments: 'approval_comments'
     };
 
     // Build SET clause from only the fields present in the request body
@@ -901,7 +932,10 @@ router.put('/records/:id', async (req, res) => {
         cnic_urls AS "cnicUrls",
         additional_urls AS "additionalUrls",
         submitted_at AS "submittedAt",
-        approval_status AS "approvalStatus"
+        approval_status AS "approvalStatus",
+        approval_comments AS "approvalComments",
+        migration_batch_id AS "migrationBatchId",
+        migrated_at AS "migratedAt"
     `;
 
     const result = await pool.query(updateQuery, values);
@@ -966,6 +1000,93 @@ router.delete('/records/:id', async (req, res) => {
   } catch (error) {
     console.error('Delete record error: Failed to delete student record');
     res.status(500).json({ message: 'Failed to delete record' });
+  }
+});
+
+// POST /api/admin/records/mark-migrated - Mark records as migrated with batch ID
+router.post('/records/mark-migrated', async (req, res) => {
+  try {
+    const { recordIds, batchId, migratedAt } = req.body;
+
+    if (!recordIds || !Array.isArray(recordIds) || recordIds.length === 0 || !batchId) {
+      return res.status(400).json({
+        success: false,
+        message: 'recordIds and batchId are required'
+      });
+    }
+
+    if (!migratedAt || isNaN(Date.parse(migratedAt))) {
+      return res.status(400).json({
+        success: false,
+        message: 'migratedAt must be a valid ISO 8601 date string'
+      });
+    }
+
+    // Build parameterized IN clause
+    const placeholders = recordIds.map((_, i) => '$' + (i + 3)).join(', ');
+    const query = `
+      UPDATE student_records
+      SET migration_batch_id = $1, migrated_at = $2
+      WHERE id IN (${placeholders})
+    `;
+
+    const result = await pool.query(query, [batchId, migratedAt, ...recordIds]);
+
+    // Audit log
+    try {
+      await pool.query(
+        `INSERT INTO admin_audit_log
+         (admin_user_id, action, resource_type, resource_id, details, ip_address)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [
+          req.user.id,
+          'MARK_MIGRATED',
+          'student_record',
+          null,
+          JSON.stringify({ batchId, recordIds, migratedAt }),
+          req.ip
+        ]
+      );
+    } catch (auditError) {
+      // Audit log table doesn't exist - skip
+    }
+
+    res.json({
+      success: true,
+      updatedCount: result.rowCount
+    });
+  } catch (error) {
+    console.error('Mark migrated error: Failed to mark records as migrated');
+    res.status(500).json({
+      success: false,
+      message: 'Failed to mark records as migrated'
+    });
+  }
+});
+
+// GET /api/admin/migration-batches - Get all distinct migration batches
+router.get('/migration-batches', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT
+        migration_batch_id AS "batchId",
+        MIN(migrated_at) AS "migratedAt",
+        COUNT(*) AS "totalRecords"
+      FROM student_records
+      WHERE migration_batch_id IS NOT NULL
+      GROUP BY migration_batch_id
+      ORDER BY MIN(migrated_at) DESC
+    `);
+
+    res.json({
+      batches: result.rows.map(row => ({
+        ...row,
+        totalRecords: parseInt(row.totalRecords)
+      }))
+    });
+  } catch (error) {
+    console.error('Migration batches error: Failed to fetch migration batches');
+    res.status(500).json({ message: 'Failed to fetch migration batches' });
   }
 });
 
