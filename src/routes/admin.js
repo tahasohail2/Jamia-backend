@@ -667,7 +667,8 @@ router.get('/records', async (req, res) => {
         approved_at AS "approvedAt",
         additional_urls AS "additionalUrls",
         migration_batch_id AS "migrationBatchId",
-        migrated_at AS "migratedAt"
+        migrated_at AS "migratedAt",
+        migration_comment AS "migrationComment"
       FROM student_records
       ${whereClause}
       ORDER BY submitted_at DESC
@@ -737,7 +738,8 @@ router.get('/records/:id', async (req, res) => {
         approved_at AS "approvedAt",
         approval_comments AS "approvalComments",
         migration_batch_id AS "migrationBatchId",
-        migrated_at AS "migratedAt"
+        migrated_at AS "migratedAt",
+        migration_comment AS "migrationComment"
       FROM student_records 
       WHERE id = $1`,
       [id]
@@ -935,7 +937,8 @@ router.put('/records/:id', async (req, res) => {
         approval_status AS "approvalStatus",
         approval_comments AS "approvalComments",
         migration_batch_id AS "migrationBatchId",
-        migrated_at AS "migratedAt"
+        migrated_at AS "migratedAt",
+        migration_comment AS "migrationComment"
     `;
 
     const result = await pool.query(updateQuery, values);
@@ -1117,7 +1120,7 @@ router.post('/records/bulk-update-status', async (req, res) => {
 
       const result = await pool.query(
         `UPDATE student_records
-         SET approval_status = $1, approval_comments = $2
+         SET approval_status = $1, migration_comment = $2
          WHERE id = $3`,
         [statusValue, item.comment, item.id]
       );
