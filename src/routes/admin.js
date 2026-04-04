@@ -761,7 +761,7 @@ router.patch('/records/:id/approval', async (req, res) => {
     const { approvalStatus } = req.body;
 
     // Validate approval status - accept 'approved', 'disapproved', 'pending', or null
-    const validStatuses = ['approved', 'disapproved', 'pending', null];
+    const validStatuses = ['approved', 'disapproved', 'pending', 'admitted', 'denied', null];
     
     if (!validStatuses.includes(approvalStatus)) {
       return res.status(400).json({
@@ -1087,6 +1087,124 @@ router.get('/migration-batches', async (req, res) => {
   } catch (error) {
     console.error('Migration batches error: Failed to fetch migration batches');
     res.status(500).json({ message: 'Failed to fetch migration batches' });
+  }
+});
+
+// POST /api/admin/records/bulk-update-status - Persist Jamia API response statuses
+router.post('/records/bulk-update-status', async (req, res) => {
+  try {
+    const { updates } = req.body;
+
+    if (!updates || !Array.isArray(updates) || updates.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'updates must be a non-empty array'
+      });
+    }
+
+    const validStatuses = ['admitted', 'denied', 'validation_failed'];
+    let updatedCount = 0;
+
+    for (const item of updates) {
+      if (!item.id || !item.status || typeof item.comment !== 'string') {
+        continue;
+      }
+      if (!validStatuses.includes(item.status)) {
+        continue;
+      }
+
+      const statusValue = item.status === 'validation_failed' ? 'approved' : item.status;
+
+      const result = await pool.query(
+        `UPDATE student_records
+         SET approval_status = $1, approval_comments = $2
+         WHERE id = $3`,
+        [statusValue, item.comment, item.id]
+      );
+      updatedCount += result.rowCount;
+    }
+
+    // Audit log
+    try {
+      await pool.query(
+        `INSERT INTO admin_audit_log
+         (admin_user_id, action, resource_type, resource_id, details, ip_address)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [
+          req.user.id,
+          'BULK_UPDATE_STATUS',
+          'student_record',
+          null,
+          JSON.stringify({ count: updates.length }),
+          req.ip
+        ]
+      );
+    } catch (auditError) {
+      // Audit log table doesn't exist - skip
+    }
+
+    res.json({
+      success: true,
+      updatedCount
+    });
+  } catch (error) {
+    console.error('Bulk update status error: Failed to update record statuses');
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update record statuses'
+    });
+  }
+});
+
+// POST /api/admin/records/clear-migration-batch - Clear batch ID for re-migration
+router.post('/records/clear-migration-batch', async (req, res) => {
+  try {
+    const { recordIds } = req.body;
+
+    if (!recordIds || !Array.isArray(recordIds) || recordIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'recordIds must be a non-empty array'
+      });
+    }
+
+    const placeholders = recordIds.map((_, i) => '$' + (i + 1)).join(', ');
+    const result = await pool.query(
+      `UPDATE student_records
+       SET migration_batch_id = NULL, migrated_at = NULL
+       WHERE id IN (${placeholders})`,
+      recordIds
+    );
+
+    // Audit log
+    try {
+      await pool.query(
+        `INSERT INTO admin_audit_log
+         (admin_user_id, action, resource_type, resource_id, details, ip_address)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [
+          req.user.id,
+          'CLEAR_MIGRATION_BATCH',
+          'student_record',
+          null,
+          JSON.stringify({ recordIds }),
+          req.ip
+        ]
+      );
+    } catch (auditError) {
+      // Audit log table doesn't exist - skip
+    }
+
+    res.json({
+      success: true,
+      updatedCount: result.rowCount
+    });
+  } catch (error) {
+    console.error('Clear migration batch error: Failed to clear migration batch');
+    res.status(500).json({
+      success: false,
+      message: 'Failed to clear migration batch'
+    });
   }
 });
 
