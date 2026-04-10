@@ -9,6 +9,7 @@ const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 const recordsRouter = require('./routes/records');
 const authRouter = require('./routes/auth');
 const adminRouter = require('./routes/admin');
+const admissionsRouter = require('./routes/admissions');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -24,6 +25,7 @@ app.use(corsMiddleware);
 app.use('/api/records', recordsRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/admin', adminRouter);
+app.use('/api/admissions', admissionsRouter);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
