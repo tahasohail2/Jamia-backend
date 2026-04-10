@@ -46,6 +46,22 @@ const mapRowToRecord = (row) => {
 // POST /api/records - Create a new student record
 const createRecord = async (req, res, next) => {
   try {
+    // ── Admission status guard ──────────────────────────────────────────────
+    const settingsResult = await pool.query(
+      `SELECT key, value FROM app_settings WHERE key IN ('is_admission_open', 'closure_reason')`
+    );
+    const settings = {};
+    for (const row of settingsResult.rows) settings[row.key] = row.value;
+
+    const isOpen = settings['is_admission_open'] !== 'false';
+    if (!isOpen) {
+      const reason = settings['closure_reason'] || 'Registration is currently closed.';
+      return res.status(403).json({
+        status: 'error',
+        message: reason
+      });
+    }
+    // ───────────────────────────────────────────────────────────────────────
     const {
       admissionType,
       gender,

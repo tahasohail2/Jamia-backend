@@ -1211,4 +1211,67 @@ router.post('/records/clear-migration-batch', async (req, res) => {
   }
 });
 
+// ─── Admission Status Settings ───────────────────────────────────────────────
+
+// PATCH /api/admin/settings/admission-status  (admin-only)
+router.patch('/settings/admission-status', async (req, res) => {
+  try {
+    const { is_admission_open, reason } = req.body;
+
+    if (typeof is_admission_open !== 'boolean') {
+      return res.status(400).json({
+        success: false,
+        message: 'is_admission_open must be a boolean'
+      });
+    }
+
+    if (is_admission_open === false && (!reason || !reason.trim())) {
+      return res.status(400).json({
+        success: false,
+        message: 'reason is required when closing admissions'
+      });
+    }
+
+    const closureReason = is_admission_open ? '' : reason.trim();
+
+    await pool.query(
+      `INSERT INTO app_settings (key, value) VALUES ('is_admission_open', $1)
+       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+      [String(is_admission_open)]
+    );
+
+    await pool.query(
+      `INSERT INTO app_settings (key, value) VALUES ('closure_reason', $1)
+       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+      [closureReason]
+    );
+
+    // Audit log
+    try {
+      await pool.query(
+        `INSERT INTO admin_audit_log
+         (admin_user_id, action, resource_type, resource_id, details, ip_address)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [
+          req.user.id,
+          'ADMISSION_STATUS_CHANGED',
+          'app_settings',
+          null,
+          JSON.stringify({ is_admission_open, reason: closureReason, changedBy: req.user.username }),
+          req.ip
+        ]
+      );
+    } catch (_) { /* audit table may not exist */ }
+
+    res.json({
+      success: true,
+      message: `Admissions are now ${is_admission_open ? 'open' : 'closed'}`,
+      data: { is_admission_open, closure_reason: closureReason }
+    });
+  } catch (error) {
+    console.error('Admission status update error:', error.message);
+    res.status(500).json({ success: false, message: 'Failed to update admission status' });
+  }
+});
+
 module.exports = router;
