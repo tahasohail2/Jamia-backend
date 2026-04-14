@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const { pool } = require('../config/database');
 const AdminUser = require('../models/AdminUser');
 const authMiddleware = require('../middleware/authMiddleware');
@@ -454,7 +454,7 @@ function generateCSVWithUrduHeaders(records) {
 // GET /api/admin/records/export - Export records as CSV
 router.get('/records/export', async (req, res) => {
   try {
-    const { search, admissionType, gender, department, approvalStatus, migrationBatchId } = req.query;
+    const { search, admissionType, gender, department, approvalStatus, migrationBatchId, sessionYear } = req.query;
 
     let whereConditions = [];
     let queryParams = [];
@@ -563,6 +563,136 @@ router.get('/records/export', async (req, res) => {
   }
 });
 
+// POST /api/admin/records - Create a new student record manually
+router.post('/records', async (req, res) => {
+  try {
+    const {
+      sessionYear,
+      studentName,
+      fatherName,
+      dob,
+      cnic,
+      phone,
+      whatsapp,
+      fullAddress,
+      currentAddress,
+      gender,
+      department,
+      admissionType,
+      educationType,
+      requiredGrade,
+      previousEducation,
+      registrationNo,
+      lastYearGrade,
+      nextYearGrade,
+      remarks,
+      approvalStatus,
+      approvalComments
+    } = req.body;
+
+    // Validation
+    if (!studentName || !fatherName || !sessionYear) {
+      return res.status(400).json({
+        success: false,
+        message: 'studentName, fatherName, and sessionYear are required'
+      });
+    }
+
+    if (!Number.isInteger(parseInt(sessionYear))) {
+      return res.status(400).json({
+        success: false,
+        message: 'sessionYear must be a valid integer'
+      });
+    }
+
+    // CNIC format validation (if provided)
+    if (cnic && !/^\d{5}-\d{7}-\d{1}$/.test(cnic)) {
+      return res.status(400).json({
+        success: false,
+        message: 'CNIC must match format XXXXX-XXXXXXX-X'
+      });
+    }
+
+    // Validate approvalStatus
+    const validStatuses = ['pending', 'approved', 'disapproved', null, undefined];
+    if (!validStatuses.includes(approvalStatus)) {
+      return res.status(400).json({
+        success: false,
+        message: 'approvalStatus must be pending, approved, disapproved, or omitted'
+      });
+    }
+
+    // Convert 'pending' to null for DB storage
+    const statusValue = (!approvalStatus || approvalStatus === 'pending') ? null : approvalStatus;
+
+    const result = await pool.query(
+      `INSERT INTO student_records (
+        session_year, student_name, father_name, dob, cnic, phone, whatsapp,
+        full_address, current_address, gender, department, admission_type,
+        education_type, required_grade, previous_education, registration_no,
+        last_year_grade, next_year_grade, exam_part1_marks, exam_part2_marks,
+        total_marks, remarks, approval_status, approval_comments, source, submitted_at
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7,
+        $8, $9, $10, $11, $12,
+        $13, $14, $15, $16,
+        $17, $18, '', '', '',
+        $19, $20, $21, 'admin_manual', NOW()
+      ) RETURNING
+        id,
+        session_year AS "sessionYear",
+        student_name AS "studentName",
+        father_name AS "fatherName",
+        dob, cnic, phone, whatsapp,
+        full_address AS "fullAddress",
+        current_address AS "currentAddress",
+        gender, department,
+        admission_type AS "admissionType",
+        education_type AS "educationType",
+        required_grade AS "requiredGrade",
+        previous_education AS "previousEducation",
+        registration_no AS "registrationNo",
+        last_year_grade AS "lastYearGrade",
+        next_year_grade AS "nextYearGrade",
+        remarks,
+        approval_status AS "approvalStatus",
+        approval_comments AS "approvalComments",
+        source,
+        submitted_at AS "submittedAt"`,
+      [
+        parseInt(sessionYear), studentName, fatherName || '', dob || '2000-01-01',
+        cnic || '', phone || '', whatsapp || '',
+        fullAddress || '', currentAddress || '', gender || '',
+        department || '', admissionType || '', educationType || '',
+        requiredGrade || '', previousEducation || '', registrationNo || '',
+        lastYearGrade || '', nextYearGrade || '', remarks || '',
+        statusValue, approvalComments || null
+      ]
+    );
+
+    const record = result.rows[0];
+
+    // Audit log
+    try {
+      await pool.query(
+        `INSERT INTO admin_audit_log
+         (admin_user_id, action, resource_type, resource_id, details, ip_address)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [
+          req.user.id, 'CREATE', 'student_record', record.id,
+          JSON.stringify({ studentName: record.studentName, sessionYear: record.sessionYear, source: 'admin_manual' }),
+          req.ip
+        ]
+      );
+    } catch (_) { /* audit log table may not exist */ }
+
+    res.status(201).json(record);
+  } catch (error) {
+    console.error('Create record error:', error.message);
+    res.status(500).json({ success: false, message: 'Failed to create record' });
+  }
+});
+
 // GET /api/admin/records - Get paginated records with filters
 router.get('/records', async (req, res) => {
   try {
@@ -574,7 +704,8 @@ router.get('/records', async (req, res) => {
       gender,
       department,
       approvalStatus,
-      migrationBatchId
+      migrationBatchId,
+      sessionYear
     } = req.query;
 
     const offset = (page - 1) * pageSize;
@@ -635,6 +766,13 @@ router.get('/records', async (req, res) => {
       }
     }
 
+    // Session Year Filter
+    if (sessionYear) {
+      whereConditions.push(`session_year = $${paramIndex}`);
+      queryParams.push(parseInt(sessionYear));
+      paramIndex++;
+    }
+
     const whereClause = whereConditions.length > 0
       ? 'WHERE ' + whereConditions.join(' AND ')
       : '';
@@ -663,6 +801,8 @@ router.get('/records', async (req, res) => {
         phone,
         registration_no AS "registrationNo",
         submitted_at AS "submittedAt",
+        session_year AS "sessionYear",
+        source,
         approval_status AS "approvalStatus",
         approved_at AS "approvedAt",
         additional_urls AS "additionalUrls",
