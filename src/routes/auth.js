@@ -39,11 +39,13 @@ router.post('/login', loginLimiter, async (req, res) => {
       { expiresIn: process.env.JWT_EXPIRES_IN || '8h' }
     );
 
+    const isProduction = process.env.NODE_ENV === 'production';
+
     // Set HTTP-only cookie
     res.cookie('adminToken', token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite:"none",
+      secure: isProduction,
+      sameSite: isProduction ? 'none' : 'lax',
       maxAge: 8 * 60 * 60 * 1000 // 8 hours
     });
 
@@ -63,7 +65,12 @@ router.post('/login', loginLimiter, async (req, res) => {
 
 // POST /api/auth/logout
 router.post('/logout', (req, res) => {
-  res.clearCookie('adminToken');
+  const isProduction = process.env.NODE_ENV === 'production';
+  res.clearCookie('adminToken', {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? 'none' : 'lax'
+  });
   res.json({ message: 'Logged out successfully' });
 });
 
